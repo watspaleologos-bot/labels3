@@ -165,6 +165,18 @@ class Handler(BaseHTTPRequestHandler):
                 "last_contact_at": contact,
             })
             return
+        if path == "/api/state-status":
+            if not self._view_authorized():
+                self._json({"error": "Unauthorized"}, 401)
+                return
+            env = get_state_envelope()
+            self._json({
+                "ok": True,
+                "received_at": env["received_at"],
+                "last_contact_at": env["last_contact_at"],
+                "snapshot_hash": env["snapshot_hash"],
+            })
+            return
         if path == "/api/state":
             if not self._view_authorized():
                 self._json({"error": "Unauthorized"}, 401)
