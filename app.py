@@ -16,11 +16,13 @@ SYNC_TOKEN = os.environ.get("LABEL3_SYNC_TOKEN", "").strip()
 VIEW_PIN = os.environ.get("LABEL3_VIEW_PIN", "").strip()
 STATE_FILE = Path(os.environ.get("LABEL3_STATE_FILE", "/tmp/label3_readonly_state.json"))
 MAX_BODY = 12 * 1024 * 1024
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+SUPPORTED_SCHEMA_VERSIONS = {2, 3}
 
 _lock = threading.RLock()
 _state: dict | None = None
 _received_at: str | None = None
+_last_contact_at: str | None = None
 
 
 def _utc_now():
@@ -32,24 +34,26 @@ def _safe_equal(a, b):
 
 
 def _load_state():
-    global _state, _received_at
+    global _state, _received_at, _last_contact_at
     try:
         if STATE_FILE.exists():
             payload = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             if isinstance(payload, dict) and isinstance(payload.get("state"), dict):
                 _state = payload["state"]
                 _received_at = str(payload.get("received_at") or "") or None
+                _last_contact_at = str(payload.get("last_contact_at") or _received_at or "") or None
     except Exception:
         _state = None
         _received_at = None
+        _last_contact_at = None
 
 
-def _persist_state(state, received_at):
+def _persist_state(state, received_at, last_contact_at=None):
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temp = STATE_FILE.with_suffix(STATE_FILE.suffix + ".tmp")
         temp.write_text(
-            json.dumps({"state": state, "received_at": received_at}, ensure_ascii=False, separators=(",", ":")),
+            json.dumps({"state": state, "received_at": received_at, "last_contact_at": last_contact_at or received_at}, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
         temp.replace(STATE_FILE)
@@ -58,21 +62,30 @@ def _persist_state(state, received_at):
         pass
 
 
+def _touch_contact():
+    global _last_contact_at
+    stamp = _utc_now()
+    with _lock:
+        _last_contact_at = stamp
+    return stamp
+
+
 def get_state_envelope():
     with _lock:
         return {
             "ok": True,
             "state": _state,
             "received_at": _received_at,
+            "last_contact_at": _last_contact_at,
             "snapshot_hash": (_state or {}).get("snapshot_hash"),
         }
 
 
 def apply_snapshot(snapshot):
-    global _state, _received_at
+    global _state, _received_at, _last_contact_at
     if not isinstance(snapshot, dict):
         raise ValueError("Invalid snapshot")
-    if int(snapshot.get("schema_version") or 0) != SCHEMA_VERSION:
+    if int(snapshot.get("schema_version") or 0) not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError("Unsupported snapshot schema")
     required = ("source_version", "generated_at", "board", "flow", "snapshot_hash")
     if any(key not in snapshot for key in required):
@@ -81,11 +94,13 @@ def apply_snapshot(snapshot):
     with _lock:
         _state = snapshot
         _received_at = received_at
-        _persist_state(snapshot, received_at)
+        _last_contact_at = received_at
+        _persist_state(snapshot, received_at, received_at)
     return {
         "ok": True,
         "snapshot_hash": snapshot.get("snapshot_hash"),
         "received_at": received_at,
+        "last_contact_at": received_at,
     }
 
 
@@ -139,8 +154,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self._sync_authorized():
                 self._json({"error": "Unauthorized"}, 401)
                 return
+            # This authenticated lightweight poll is also the heartbeat.  It updates
+            # online freshness even when the canonical snapshot hash did not change.
+            contact = _touch_contact()
             env = get_state_envelope()
-            self._json({"ok": True, "snapshot_hash": env["snapshot_hash"], "received_at": env["received_at"]})
+            self._json({
+                "ok": True,
+                "snapshot_hash": env["snapshot_hash"],
+                "received_at": env["received_at"],
+                "last_contact_at": contact,
+            })
             return
         if path == "/api/state":
             if not self._view_authorized():
