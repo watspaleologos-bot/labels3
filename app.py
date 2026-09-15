@@ -191,6 +191,10 @@ class Handler(BaseHTTPRequestHandler):
             body = (STATIC_DIR / "header_logo.png").read_bytes()
             self._send(200, body, "image/png")
             return
+        if path == "/app-icon.png":
+            body = (STATIC_DIR / "app-icon.png").read_bytes()
+            self._send(200, body, "image/png")
+            return
         self._json({"error": "Not found"}, 404)
 
     def do_POST(self):
