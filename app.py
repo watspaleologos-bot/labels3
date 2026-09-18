@@ -16,8 +16,8 @@ SYNC_TOKEN = os.environ.get("LABEL3_SYNC_TOKEN", "").strip()
 VIEW_PIN = os.environ.get("LABEL3_VIEW_PIN", "").strip()
 STATE_FILE = Path(os.environ.get("LABEL3_STATE_FILE", "/tmp/label3_readonly_state.json"))
 MAX_BODY = 12 * 1024 * 1024
-SCHEMA_VERSION = 3
-SUPPORTED_SCHEMA_VERSIONS = {2, 3}
+SCHEMA_VERSION = 4
+SUPPORTED_SCHEMA_VERSIONS = {2, 3, 4}
 
 _lock = threading.RLock()
 _state: dict | None = None
@@ -105,7 +105,7 @@ def apply_snapshot(snapshot):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PaleologosLabels3Readonly/1.0"
+    server_version = "PaleologosLabels3Readonly/1.1"
 
     def log_message(self, fmt, *args):
         print("[%s] %s" % (self.log_date_time_string(), fmt % args))
