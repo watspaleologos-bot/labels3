@@ -191,9 +191,18 @@ class Handler(BaseHTTPRequestHandler):
             body = (STATIC_DIR / "header_logo.png").read_bytes()
             self._send(200, body, "image/png")
             return
-        if path == "/app-icon.png":
-            body = (STATIC_DIR / "app-icon.png").read_bytes()
+        if path in {"/app-icon.png", "/app-icon-192.png", "/app-icon-512.png"}:
+            filename = path.lstrip("/")
+            body = (STATIC_DIR / filename).read_bytes()
             self._send(200, body, "image/png")
+            return
+        if path == "/manifest.webmanifest":
+            body = (STATIC_DIR / "manifest.webmanifest").read_bytes()
+            self._send(200, body, "application/manifest+json; charset=utf-8")
+            return
+        if path == "/sw.js":
+            body = (STATIC_DIR / "sw.js").read_bytes()
+            self._send(200, body, "application/javascript; charset=utf-8")
             return
         self._json({"error": "Not found"}, 404)
 
