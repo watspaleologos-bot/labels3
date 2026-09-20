@@ -1,4 +1,4 @@
-const CACHE='paleologos-label3-remote-pwa-v1';
+const CACHE='paleologos-label3-remote-pwa-v1.24.7';
 const SHELL=['/','/manifest.webmanifest','/header_logo.png','/app-icon.png','/app-icon-192.png','/app-icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
